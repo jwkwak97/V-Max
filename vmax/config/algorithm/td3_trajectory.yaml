@@ -1,0 +1,38 @@
+defaults:
+  - /network/base
+  - _self_
+
+# TD3 with trajectory output + JAX LQR
+# Actor outputs: trajectory (num_waypoints * 2 = 32 dims)
+# LQR converts: trajectory → [acceleration, steering_curvature] in [-1, 1]
+# Critic evaluates: Q(obs, control_action)  (2-dim, same as standard TD3)
+# Policy gradient: obs → actor → LQR → action → Q  (fully differentiable)
+name: TD3
+unroll_length: 1
+learning_rate: 3e-4
+discount: 0.99
+tau: 0.005
+policy_freq: 2
+noise_std: 0.2
+noise_clip: 0.5
+batch_size: 64
+grad_updates_per_step: 4
+buffer_size: 100_000
+learning_start: 100
+
+# Trajectory mode: actor outputs num_waypoints * 2 = 32 dims
+# LQR converts to 2-dim control; set 0 to disable (standard TD3)
+trajectory_size: 32  # 16 waypoints × 2 (x_forward, y_left)
+
+network:
+  policy:
+    layer_sizes: [256, 256]
+    activation: relu
+    final_activation: tanh  # trajectory values bounded to [-1, 1]
+
+  value:
+    layer_sizes: [256, 256]
+    activation: relu
+    final_activation: relu
+    num_networks: 2
+    shared_encoder: false
