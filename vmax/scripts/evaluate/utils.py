@@ -110,6 +110,9 @@ def get_algorithm_modules(algorithm: str):
     elif algorithm == "ppo":
         from vmax.agents.learning.reinforcement.ppo.ppo_factory import make_inference_fn
         from vmax.agents.learning.reinforcement.ppo.ppo_factory import make_networks as build_network
+    elif algorithm == "td3":
+        from vmax.agents.learning.reinforcement.td3.td3_factory import make_inference_fn
+        from vmax.agents.learning.reinforcement.td3.td3_factory import make_networks as build_network
     else:
         raise ValueError(f"Invalid algorithm: {algorithm}")
 
@@ -160,9 +163,9 @@ def setup_evaluation(
 
         eval_config["encoder"] = eval_config["network"]["encoder"]
         eval_config["policy"] = eval_config["algorithm"]["network"]["policy"]
-        eval_config["value"] = eval_config["algorithm"]["network"]["value"]
+        eval_config["value"] = eval_config["algorithm"]["network"].get("value")
         eval_config["unflatten_config"] = eval_config["observation_config"]
-        eval_config["action_distribution"] = eval_config["algorithm"]["network"]["action_distribution"]
+        eval_config["action_distribution"] = eval_config["algorithm"]["network"].get("action_distribution")
 
         termination_keys = eval_config["termination_keys"]
 
@@ -234,7 +237,7 @@ def load_model(env, algorithm, config, model_path):
             imitation_learning_rate=config["algorithm"]["imitation_learning_rate"],
             network_config=config,
         )
-    elif algorithm.lower() in ["sac", "bc", "ppo"]:
+    elif algorithm.lower() in ["sac", "bc", "ppo", "td3"]:
         network = build_network(
             observation_size=obs_size,
             action_size=action_size,

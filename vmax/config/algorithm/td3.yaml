@@ -1,0 +1,29 @@
+defaults:
+  - /network/base
+  - _self_
+
+name: TD3
+unroll_length: 1
+learning_rate: 3e-4
+discount: 0.99
+tau: 0.005
+policy_freq: 2
+noise_std: 0.2
+noise_clip: 0.5
+batch_size: 64
+grad_updates_per_step: 4
+buffer_size: 100_000
+learning_start: 100
+
+network:
+  policy:
+    layer_sizes: [256, 256]
+    activation: relu
+    final_activation: tanh  # deterministic bounded action
+
+  value:
+    layer_sizes: [256, 256]
+    activation: relu
+    final_activation: relu
+    num_networks: 2
+    shared_encoder: false

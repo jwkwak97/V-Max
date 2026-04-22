@@ -25,6 +25,8 @@ def get_train_fn(algorithm_type: str) -> callable:
         from .reinforcement.sac import train
     elif algorithm_type == "BC":
         from .imitation.bc import train
+    elif algorithm_type == "TD3":
+        from .reinforcement.td3 import train
     else:
         raise ValueError(f"Unknown algorithm type: {algorithm_type}")
 
