@@ -16,6 +16,12 @@ from tensorboardX import SummaryWriter
 
 from vmax.simulator import datasets
 
+try:
+    import wandb
+    _WANDB_AVAILABLE = True
+except ImportError:
+    _WANDB_AVAILABLE = False
+
 
 logger = logging.getLogger(__name__)
 
@@ -81,21 +87,26 @@ def apply_xla_flags(config: dict) -> None:
         jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
 
 
+def setup_wandb(config: dict, run_path: str) -> None:
+    """Initialize a WandB run."""
+    if not _WANDB_AVAILABLE:
+        logger.warning("wandb not installed — skipping WandB init.")
+        return
+    wandb.init(
+        project=config.get("wandb_project", "vmax"),
+        name=config.get("name_run") or run_path.split("/")[-1],
+        config=config,
+        dir=run_path,
+    )
+
+
 def log_metrics(
     num_steps: int | None = None,
     metrics: dict | None = None,
     total_timesteps: int | None = None,
     writer: SummaryWriter = None,
 ) -> None:
-    """Log and print training metrics and optionally send them to TensorBoard.
-
-    Args:
-        num_steps: Number of steps.
-        metrics: Dictionary of metric names and values.
-        total_timesteps: Total timesteps.
-        writer: TensorBoard summary writer.
-
-    """
+    """Log metrics to TensorBoard and WandB (if initialized)."""
     if total_timesteps is not None:
         logger.info(f"-> Step {num_steps}/{total_timesteps} - {(num_steps / total_timesteps) * 100:.2f}%")
         logger.info(f"-> Data time     : {metrics['runtime/data_time']:.2f}s")
@@ -103,6 +114,7 @@ def log_metrics(
         logger.info(f"-> Log time      : {metrics['runtime/log_time']:.2f}s")
         logger.info(f"-> Eval time     : {metrics['runtime/eval_time']:.2f}s")
 
+    wandb_metrics = {}
     for key, value in metrics.items():
         if writer:
             if total_timesteps is None:
@@ -111,9 +123,12 @@ def log_metrics(
                 prefix = "metrics/" if "/" not in key else ""
                 if "ep_len_mean" in key or "ep_rew_mean" in key:
                     prefix = "rollout/"
-
             writer.add_scalar(f"{prefix}{key}", value, num_steps)
+        wandb_metrics[key] = value
         logger.info(f"{key}: {value}")
+
+    if _WANDB_AVAILABLE and wandb.run is not None:
+        wandb.log(wandb_metrics, step=num_steps)
 
 
 def build_config_dicts(config: dict) -> tuple[dict, dict]:

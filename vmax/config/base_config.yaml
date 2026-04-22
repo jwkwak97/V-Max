@@ -12,6 +12,8 @@ defaults:
 debug_flag: false
 perf_flag: false
 cache_flag: false
+use_wandb: false
+wandb_project: vmax
 
 # Run config
 total_timesteps: 20_000_000

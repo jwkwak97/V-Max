@@ -19,7 +19,11 @@ from vmax.scripts.training import train_utils
 OmegaConf.register_new_resolver("output_dir", train_utils.resolve_output_dir)
 
 
-@hydra.main(version_base=None, config_name="base_config", config_path=PATH_TO_APP + "/config")
+@hydra.main(
+    version_base=None,
+    config_name="base_config",
+    config_path=PATH_TO_APP + "/config",
+)
 def run(cfg: DictConfig) -> None:
     """Run the training process with the provided configuration.
 
@@ -40,7 +44,9 @@ def run(cfg: DictConfig) -> None:
         path=env_config["path_dataset"],
         max_num_objects=env_config["max_num_objects"],
         include_sdc_paths=env_config["sdc_paths_from_data"],
-        batch_dims=(env_config["num_envs"], env_config["num_episode_per_epoch"]),
+        batch_dims=(
+            env_config["num_envs"], env_config["num_episode_per_epoch"]
+        ),
         seed=env_config["seed"],
         distributed=True,
     )
@@ -70,16 +76,19 @@ def run(cfg: DictConfig) -> None:
         termination_keys=env_config["termination_keys"],
     )
 
-    absolute_run_path = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+    hydra_cfg = hydra.core.hydra_config.HydraConfig.get()
+    absolute_run_path = hydra_cfg.runtime.output_dir
     relative_run_path = "/".join(absolute_run_path.split("/")[-2:])
 
     model_path = os.path.join(relative_run_path, "model")
     os.makedirs(model_path, exist_ok=True)
 
     writer = train_utils.setup_tensorboard(relative_run_path)
+    if config.get("use_wandb", False):
+        train_utils.setup_wandb(config, absolute_run_path)
     progress = partial(train_utils.log_metrics, writer=writer)
 
-    ## TRAINING
+    # training
     train_fn = learning.get_train_fn(config["algorithm"]["name"])
 
     train_fn(
