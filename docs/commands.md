@@ -67,7 +67,7 @@ cd /home/jovyan/workspace/V-Max
 /home/jovyan/.conda/envs/vmax/bin/python vmax/scripts/training/train.py \
   algorithm=td3_trajectory \
   "network/encoder=wayformer" \
-  path_dataset=/home/jovyan/workspace/vmax_data/nuplan_tfrecord/test/train_boston_test.tfrecord \
+  path_dataset=/home/jovyan/workspace/vmax_data/scenariomax_test/training.tfrecord \
   use_wandb=false \
   total_timesteps=20_000_000
 ```
@@ -84,7 +84,7 @@ cd /home/jovyan/workspace/V-Max
 /home/jovyan/.conda/envs/vmax/bin/python vmax/scripts/training/train.py \
   algorithm=td3_trajectory \
   "network/encoder=wayformer" \
-  path_dataset=/home/jovyan/workspace/vmax_data/nuplan_tfrecord/test/train_boston_test.tfrecord \
+  path_dataset=/home/jovyan/workspace/vmax_data/scenariomax_test/training.tfrecord \
   use_wandb=false \
   total_timesteps=20_000_000
 
@@ -147,7 +147,7 @@ cd /home/jovyan/workspace/V-Max
 /home/jovyan/.conda/envs/vmax/bin/python vmax/scripts/evaluate_traj/evaluate.py \
   --sdc_actor ai \
   --path_model "<run_name>" \
-  --path_dataset /home/jovyan/workspace/vmax_data/nuplan_tfrecord/test/train_boston_test.tfrecord \
+  --path_dataset /home/jovyan/workspace/vmax_data/scenariomax_test/training.tfrecord \
   --batch_size 4 \
   --eval_name /home/jovyan/workspace/eval_results
 ```
@@ -168,7 +168,7 @@ PATH="/home/jovyan/.conda/envs/vmax/bin:$PATH" \
 /home/jovyan/.conda/envs/vmax/bin/python vmax/scripts/evaluate_traj/evaluate.py \
   --sdc_actor ai \
   --path_model "<run_name>" \
-  --path_dataset /home/jovyan/workspace/vmax_data/nuplan_tfrecord/test/train_boston_test.tfrecord \
+  --path_dataset /home/jovyan/workspace/vmax_data/scenariomax_test/training.tfrecord \
   --render true \
   --batch_size 1 \
   --eval_name /home/jovyan/workspace/eval_results
@@ -178,7 +178,7 @@ PATH="/home/jovyan/.conda/envs/vmax/bin:$PATH" \
 /home/jovyan/.conda/envs/vmax/bin/python vmax/scripts/evaluate_traj/evaluate.py \
   --sdc_actor ai \
   --path_model "<run_name>" \
-  --path_dataset /home/jovyan/workspace/vmax_data/nuplan_tfrecord/test/train_boston_test.tfrecord \
+  --path_dataset /home/jovyan/workspace/vmax_data/scenariomax_test/training.tfrecord \
   --render true \
   --show_trajectory true \
   --batch_size 1 \
