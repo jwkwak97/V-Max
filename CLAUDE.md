@@ -130,7 +130,7 @@ cd /home/jovyan/workspace/V-Max
 
 ```
 nuPlan DB
-   ↓ (ScenarioMax, 2-step 변환)
+   ↓ (ScenarioMax, 1-step 직접 변환)
 TFRecord
    ↓
 V-Max 환경 (Waymax)
@@ -156,25 +156,32 @@ Apollo: trajectory → 별도 LQR → 차량 제어
 
 ## 3. 데이터 파이프라인
 
-### Step 1: nuPlan DB → Pickle
-- **환경**: `nuplan_ritp` conda 환경
-- **필요 이유**: ScenarioMax가 nuPlan SDK에 의존하지만, nuPlan SDK와 TensorFlow가 같은 환경에 공존 불가
-- **주의사항**: `LD_PRELOAD=/home/jovyan/.conda/envs/nuplan_ritp/lib/libstdc++.so.6` 필요 (CXXABI 버전 충돌)
+### ScenarioMax 직접 변환 (권장)
+
+- **환경**: `scenariomax` conda 환경
+- **Repo**: `/home/jovyan/workspace/ScenarioMax`
+- **입력**: nuPlan DB (`.db` 파일, `/home/jovyan/aitc-plan-team-1/data/cache/`)
+- **출력**: `<dst>/training.tfrecord` — V-Max에서 직접 사용 가능
 
 ```bash
-LD_PRELOAD=/home/jovyan/.conda/envs/nuplan_ritp/lib/libstdc++.so.6 \
-  /home/jovyan/.conda/envs/nuplan_ritp/bin/python convert_nuplan_to_pickle.py \
-  --data_path /path/to/nuplan/data \
-  --maps_path /home/jovyan/aitc-plan-team-1/nuplan-maps-v1.0
+# LD_PRELOAD: scenariomax의 libstdc++ (1.3.14)이 부족해 vmax 것 사용
+# NUPLAN_MAPS_ROOT, NUPLAN_DATA_ROOT: nuPlan devkit 환경변수
+
+LD_PRELOAD=/home/jovyan/.conda/envs/vmax/lib/libstdc++.so.6 \
+NUPLAN_MAPS_ROOT=/home/jovyan/aitc-plan-team-1/nuplan-maps-v1.0 \
+NUPLAN_DATA_ROOT=/home/jovyan/aitc-plan-team-1/data \
+/home/jovyan/.conda/envs/scenariomax/bin/scenariomax-convert \
+  --nuplan_src /home/jovyan/aitc-plan-team-1/data/cache/train_boston \
+  --dst /home/jovyan/workspace/vmax_data/nuplan_tfrecord/train_boston \
+  --target_format tfexample \
+  --num_workers 8
 ```
 
-### Step 2: Pickle → TFRecord
-- **환경**: `vmax` conda 환경 (TensorFlow 포함)
-- **필요 이유**: TFRecord 생성에 TF가 필요한데 nuplan_ritp 환경에는 TF 없음
-
-```bash
-/home/jovyan/.conda/envs/vmax/bin/python convert_pickle_to_tfrecord.py
-```
+**성능 실측**: 10 시나리오 → 326초 (4 workers, ~19MB)  
+**주요 인수**:
+- `--num_files N` : DB 파일 수 제한 (테스트용)
+- `--num_workers N` : 병렬 워커 수 (CPU 코어 수에 맞게 조정)
+- `--target_format tfexample` : Waymax 호환 TFRecord 형식
 
 ### 변환된 데이터 위치
 ```
