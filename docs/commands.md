@@ -15,13 +15,19 @@
 
 > ScenarioMax 사용. 자세한 내용은 [ScenarioMax 서버 가이드](https://github.com/jwkwak97/ScenarioMax/blob/main/docs/SERVER_SETUP.md) 참조.
 
+> **주의**: 마운트된 볼륨 이름은 서버 환경마다 다를 수 있습니다 (예: `aitc-plan-vmax-datavol-1`, `aitc-plan-team-1` 등).  
+> 아래 `NUPLAN_DATASETS_ROOT`를 본인 환경에 맞게 수정하세요.
+
 ```bash
+# 본인 환경에 맞게 수정
+export NUPLAN_DATASETS_ROOT=/home/jovyan/<마운트된-볼륨-이름>
+
 # 테스트 변환 (10개 시나리오, ~5분)
 LD_PRELOAD=/home/jovyan/.conda/envs/vmax/lib/libstdc++.so.6 \
-NUPLAN_MAPS_ROOT=/home/jovyan/aitc-plan-team-1/nuplan-maps-v1.0 \
-NUPLAN_DATA_ROOT=/home/jovyan/aitc-plan-team-1/data \
+NUPLAN_MAPS_ROOT=${NUPLAN_DATASETS_ROOT}/nuplan-maps-v1.0 \
+NUPLAN_DATA_ROOT=${NUPLAN_DATASETS_ROOT}/data \
 /home/jovyan/.conda/envs/scenariomax/bin/scenariomax-convert \
-  --nuplan_src /home/jovyan/aitc-plan-team-1/data/cache/train_boston \
+  --nuplan_src ${NUPLAN_DATASETS_ROOT}/data/cache/train_boston \
   --dst /home/jovyan/workspace/vmax_data/scenariomax_test \
   --target_format tfexample \
   --num_workers 4 \
@@ -29,10 +35,10 @@ NUPLAN_DATA_ROOT=/home/jovyan/aitc-plan-team-1/data \
 
 # 전체 변환 (train_boston 전체)
 LD_PRELOAD=/home/jovyan/.conda/envs/vmax/lib/libstdc++.so.6 \
-NUPLAN_MAPS_ROOT=/home/jovyan/aitc-plan-team-1/nuplan-maps-v1.0 \
-NUPLAN_DATA_ROOT=/home/jovyan/aitc-plan-team-1/data \
+NUPLAN_MAPS_ROOT=${NUPLAN_DATASETS_ROOT}/nuplan-maps-v1.0 \
+NUPLAN_DATA_ROOT=${NUPLAN_DATASETS_ROOT}/data \
 /home/jovyan/.conda/envs/scenariomax/bin/scenariomax-convert \
-  --nuplan_src /home/jovyan/aitc-plan-team-1/data/cache/train_boston \
+  --nuplan_src ${NUPLAN_DATASETS_ROOT}/data/cache/train_boston \
   --dst /home/jovyan/workspace/vmax_data/nuplan_tfrecord/train_boston \
   --target_format tfexample \
   --num_workers 8
@@ -47,14 +53,14 @@ NUPLAN_DATA_ROOT=/home/jovyan/aitc-plan-team-1/data \
 ```bash
 cd /home/jovyan/workspace/V-Max
 
-# 디버그 (빠른 동작 확인, ~수분)
+# 동작 확인용 (소규모 데이터, ~6분)
+# scenariomax_test: --num_files 10 으로 변환한 소규모 TFRecord
 /home/jovyan/.conda/envs/vmax/bin/python vmax/scripts/training/train.py \
   algorithm=td3_trajectory \
   "network/encoder=wayformer" \
   path_dataset=/home/jovyan/workspace/vmax_data/scenariomax_test/training.tfrecord \
   use_wandb=false \
-  total_timesteps=10000 \
-  num_envs=4 \
+  total_timesteps=50000 \
   log_freq=1
 
 # 표준 학습 (TD3 + Trajectory + LQR + WayformerEncoder)
