@@ -1,6 +1,14 @@
 # Monitoring Training with TensorBoard
 
-## 1. Start TensorBoard (on server)
+## 실행 순서
+
+### Step 1. 로컬 PC 터미널에서 SSH 터널 열기
+
+```bash
+ssh -p 31842 -L 6007:localhost:6007 jhlee2@ssh-nipagpu.kakaocloud.com
+```
+
+### Step 2. SSH 터널을 연 그 터미널에서 TensorBoard 실행
 
 ```bash
 /home/jovyan/.conda/envs/vmax/bin/tensorboard \
@@ -8,17 +16,13 @@
   --port 6007
 ```
 
-Can be started before, during, or after training — TensorBoard scans the `runs/` folder automatically.
+### Step 3. 브라우저에서 열기
 
-## 2. Open in Browser (on local PC)
-
-Open a separate terminal and create an SSH tunnel:
-
-```bash
-ssh -p 31842 -L 6007:localhost:6007 jhlee2@ssh-nipagpu.kakaocloud.com
+```
+http://localhost:6007
 ```
 
-Then open in browser: `http://localhost:6007`
+> 학습 중에도 실행 가능 — TensorBoard가 `runs/` 폴더를 자동으로 스캔함
 
 ## 3. Key Metrics
 
