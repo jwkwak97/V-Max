@@ -1,5 +1,119 @@
 # V-Max 아키텍처 설계 문서 (CLAUDE.md)
 
+## 0. 서버 사양
+
+| 항목 | 사양 |
+|------|------|
+| GPU | NVIDIA B200 × 8 (compute capability 10.0) |
+| GPU 메모리 | 183 GB / GPU |
+| RAM | 2.2 TB |
+| OS | Linux |
+
+**주의사항**:
+- GPU는 여러 사용자가 공유. 타인이 GPU 점유 중이면 OOM으로 `Killed` 발생
+- TF CUDA PTX 컴파일: B200용 바이너리 없어서 첫 실행 시 JIT 컴파일 (~30분)
+- JAX XLA 컴파일: 코드 변경 후 첫 실행 시 추가 ~10분
+- OOM 방지: `XLA_PYTHON_CLIENT_MEM_FRACTION=0.5` 환경변수로 JAX 메모리 제한 가능
+- GPU 점유 확인: `nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader`
+
+**파일 권한 주의사항**:
+- `/home/jovyan/workspace/eval_results` 디렉토리는 jhlee2 소유 → jovyan 사용자로 쓸 수 없음
+- JupyterHub 터미널(jovyan)에서 evaluate.py 실행 시 `PermissionError` 발생
+- **해결책**: `--eval_name /home/jovyan/workspace/eval_results` 사용 (workspace는 모든 사용자 쓰기 가능)
+  ```bash
+  --eval_name /home/jovyan/workspace/eval_results
+  ```
+- **해결책 2**: jhlee2 SSH 세션에서 실행 (기존 `/home/jovyan/workspace/eval_results` 그대로 사용 가능)
+  ```bash
+  ssh -p 31842 jhlee2@ssh-nipagpu.kakaocloud.com
+  ```
+
+---
+
+## 0-1. JAX B200 GPU 호환성 현황 및 모델 지원 범위 (JAX 0.5.3 + CUDA 12 환경)
+
+> 실측 기준 (2026-04-24). JAX가 공식 B200(cc10.0) 지원 버전을 출시하면 재검증 필요.
+
+### ✅ GPU에서 정상 동작하는 연산
+
+| 카테고리 | 연산 |
+|---|---|
+| 기본 행렬 | `matmul`, `dot`, `einsum`, `tensordot`, `outer`, `norm` |
+| FFT (순방향) | `fft`, `rfft`, `fft2` |
+| Convolution | `lax.conv_general_dilated` (CNN 레이어) |
+| 고유값 (비대칭) | `linalg.eig`, `linalg.eigvals` |
+| 난수 | `random.normal`, `random.uniform` |
+| 인덱싱 | `take`, `scatter` (at.set) |
+| 변환 | `jit`, `vmap`, `grad`, `pmap` |
+
+### ❌ GPU에서 실패하는 연산 및 원인
+
+| 원인 | 실패 연산 |
+|---|---|
+| **cuSolverDn 핸들 생성 실패** | `linalg.{solve, inv, pinv, qr, eigh, eigvalsh, det, slogdet, lstsq, cond, matrix_rank}` |
+| **cuSolverDn 핸들 생성 실패** | `scipy.linalg.{solve, lu, expm}` |
+| **cuSolver internal error** | `linalg.cholesky`, `scipy.linalg.cho_factor` |
+| **BLAS 미지원** | `fft.ifft`, `fft.irfft`, `fft.ifft2`, `scipy.linalg.solve_triangular` |
+| **CUDA MLIR 변환 규칙 없음** | `scipy.linalg.{schur, hessenberg}` |
+
+**근본 원인**: JAX 0.5.3 bundled CUDA 12의 `cuSolverDn` 라이브러리가 B200(compute capability 10.0)에서 핸들 초기화에 실패. JAX 0.6.x는 `cusolver_getrf_ffi` 미구현으로 실패하여 현재 사용 불가.
+
+### V-Max 학습에서의 영향
+
+| 기능 | 상태 | 이유 |
+|---|---|---|
+| JIT + vmap 시뮬레이션 | ✅ 정상 | cuSolverDn 불필요 |
+| TD3 학습 (`algorithm=td3`) | ✅ 정상 | MLP만 사용 |
+| TD3 + LQR (`algorithm=td3_trajectory`) | ✅ 정상 | JAX LQR은 closed-form 스칼라 연산 |
+| LQR 역전파 (actor loss) | ✅ 정상 | `jax.grad` 완전 통과 |
+| `jnp.linalg.solve/inv/svd` 직접 사용 | ❌ 실패 | cuSolverDn 불가 |
+
+**우회 방법**: `jnp.linalg.solve` 등 실패 연산이 꼭 필요한 경우 CPU로 강제 실행:
+```python
+with jax.default_device(jax.devices('cpu')[0]):
+    x = jnp.linalg.solve(A, b)
+```
+
+### JAX + B200에서 모델 아키텍처별 GPU 실행 가능 여부
+
+| 모델 / 아키텍처 | GPU 실행 | 핵심 연산 | 비고 |
+|---|---|---|---|
+| **MLP** | ✅ | matmul + activation | 제한 없음 |
+| **CNN** | ✅ | conv_general_dilated | 제한 없음 |
+| **Transformer / ViT** | ✅ | matmul + softmax | self-attention 전부 가능 |
+| **LSTM / GRU** | ✅ | element-wise + matmul | 순환 레이어 모두 가능 |
+| **Wayformer** | ✅ | cross-attention (matmul) | V-Max 기본 인코더 |
+| **Gaussian Process (GP)** | ❌ | `K⁻¹ = linalg.solve` | cuSolverDn 실패 |
+| **Kalman Filter** | ❌ | `P update = solve/inv` | cuSolverDn 실패 |
+| **PCA / ICA** | ❌ | SVD / eigh | cuSolverDn 실패 |
+| **Spectral 방법** | ❌ | 대칭 고유값분해 (eigh) | cuSolverDn 실패 |
+
+**결론**: matmul·activation·softmax 기반 딥러닝 모델(MLP/CNN/Transformer/LSTM/Wayformer)은 B200 + JAX 0.5.3에서 모두 GPU로 정상 학습 가능. 행렬 분해(solve/inv/svd/eigh)에 의존하는 통계적 모델(GP, Kalman, PCA 등)은 CPU 우회 필요.
+
+### V-Max 전체 기능 동작 검증 결과 (2026-04-24, GPU 실측)
+
+| 기능 | 상태 | 소요 시간 | 비고 |
+|---|---|---|---|
+| `algorithm=td3` | ✅ | ~47s | MLP 인코더 |
+| `algorithm=td3_trajectory` | ✅ | ~47s | LQR 포함 |
+| `algorithm=sac` | ✅ | ~44s | |
+| `algorithm=ppo` | ✅ | ~70s | |
+| `algorithm=bc` | ✅ | ~40s | |
+| `network/encoder=wayformer` | ✅ | ~327s | 첫 실행 XLA 컴파일 포함 |
+| `evaluate.py` | ✅ | ~34s | 20 에피소드, V-Max Score 출력 |
+
+**evaluate.py 사용법** (`--path_model`은 `runs/` 아래 run 이름만):
+```bash
+cd /home/jovyan/workspace/V-Max
+/home/jovyan/.conda/envs/vmax/bin/python vmax/scripts/evaluate/evaluate.py \
+  --sdc_actor ai \
+  --path_model "BC_VEC_24-04_04:13:51" \
+  --path_dataset /home/jovyan/workspace/vmax_data/nuplan_tfrecord/test/train_boston_test.tfrecord \
+  --batch_size 2
+```
+
+---
+
 ## 1. 프로젝트 목표
 
 | 단계 | 내용 |
@@ -55,11 +169,11 @@ LD_PRELOAD=/home/jovyan/.conda/envs/nuplan_ritp/lib/libstdc++.so.6 \
 ```
 
 ### Step 2: Pickle → TFRecord
-- **환경**: `vmax_test` conda 환경 (TensorFlow 포함)
+- **환경**: `vmax` conda 환경 (TensorFlow 포함)
 - **필요 이유**: TFRecord 생성에 TF가 필요한데 nuplan_ritp 환경에는 TF 없음
 
 ```bash
-/home/jovyan/.conda/envs/vmax_test/bin/python convert_pickle_to_tfrecord.py
+/home/jovyan/.conda/envs/vmax/bin/python convert_pickle_to_tfrecord.py
 ```
 
 ### 변환된 데이터 위치
@@ -512,7 +626,20 @@ obs → ONNX 정책 (trajectory) → Apollo LQR → 차량 제어
 
 ---
 
-## 10. 파일 변경 이력 요약
+## 10. 명령어 관리 규칙
+
+프로젝트에서 사용하는 모든 실행 명령어는 아래 파일에 기록·관리한다.
+
+```
+/home/jovyan/workspace/Commands/Command.md
+```
+
+- 새로운 명령어(학습, 변환, 평가, Docker 등)를 추가하거나 변경할 때 반드시 이 파일을 업데이트한다.
+- 명령어는 카테고리별로 구분하여 기록한다.
+
+---
+
+## 11. 파일 변경 이력 요약
 
 | 파일 | 변경 종류 | 이유 |
 |------|-----------|------|

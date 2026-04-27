@@ -239,7 +239,7 @@ def idm_step(
     Returns:
         Tuple containing the next environment transition and the generated RL transition.
     """
-    observation = jax.tree_map(lambda x: x[0], env_transition.observation)
+    observation = jax.tree_util.tree_map(lambda x: x[0], env_transition.observation)
     action_sdc = idm.select_action(observation)
     action_sdc = jnp.expand_dims(action_sdc, axis=0)
 
@@ -275,7 +275,7 @@ def pdm_step(
     Returns:
         Tuple containing the next environment transition and the generated RL transition.
     """
-    observation = jax.tree_map(lambda x: x[0], env_transition.observation)
+    observation = jax.tree_util.tree_map(lambda x: x[0], env_transition.observation)
 
     action_sdc = pdm.select_action(observation)
     action_sdc = jnp.expand_dims(action_sdc, axis=0)

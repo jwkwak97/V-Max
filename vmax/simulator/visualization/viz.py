@@ -334,7 +334,7 @@ def plot_pdm_debug(  # noqa: C901
         obs = jax.tree_util.tree_map(lambda x: x[batch_idx], obs)
 
     # Shape: (obs_A,) -> ()
-    obs = jax.tree_map(lambda x: x[obj_idx], obs)
+    obs = jax.tree_util.tree_map(lambda x: x[obj_idx], obs)
     if obs.shape:
         raise ValueError(f"Expecting shape () for obs, got {obs.shape}")
 

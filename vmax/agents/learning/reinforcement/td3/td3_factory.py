@@ -12,6 +12,44 @@ import optax
 from vmax.agents import datatypes, networks
 from vmax.agents.networks.lqr.jax_lqr import jax_lqr
 
+# ──────────────────────────────────────────────────────────────────────
+# Trajectory decoding constants
+# ──────────────────────────────────────────────────────────────────────
+_TRAJ_DT = 0.1     # waypoint timestep [s] — must match Waymax DT
+_TRAJ_SCALE = 5.0  # actor tanh output (−1,1) → physical offset (−5,5) m
+_TRAJ_SPEED = 5.0  # nominal forward speed for baseline [m/s]
+
+# ──────────────────────────────────────────────────────────────────────
+# Observation layout constants (must match base_config.yaml)
+# Flat obs: [sdc(5steps×8feat), other_agents(8×5×8), rg, tl, path]
+# Per-step SDC features: xy(2), vel_xy(2), yaw(1), length(1), width(1), valid(1)
+# Current timestep (step 4): offset 4×8=32 → vel_xy at [34, 35]
+# ──────────────────────────────────────────────────────────────────────
+_MAX_OBS_SPEED = 30.0        # matches simulator/features/extractor/utils.py MAX_SPEED
+_SDC_VEL_XY_IDX = slice(34, 36)
+
+
+def decode_trajectory(raw: jnp.ndarray, num_waypoints: int) -> jnp.ndarray:
+    """Map actor tanh output → ego-relative trajectory (metres).
+
+    Baseline: waypoint i = ((i+1)*DT*speed, 0) — straight at nominal speed.
+    Actor output is a scaled DELTA around that baseline so that
+    zero-initialised weights produce a physically meaningful trajectory
+    (straight line at 5 m/s) rather than a degenerate zero path.
+
+    Args:
+        raw:          (batch, num_waypoints*2) tanh-bounded actor output.
+        num_waypoints: number of waypoints.
+
+    Returns:
+        trajectory: (batch, num_waypoints, 2) ego-relative [x_fwd, y_left] m.
+    """
+    t = jnp.arange(1, num_waypoints + 1) * _TRAJ_DT            # (N,)
+    baseline = jnp.stack([t * _TRAJ_SPEED,
+                          jnp.zeros(num_waypoints)], axis=-1)   # (N, 2)
+    delta = raw.reshape(-1, num_waypoints, 2) * _TRAJ_SCALE     # (B, N, 2)
+    return baseline[None] + delta                                # (B, N, 2)
+
 
 @flax.struct.dataclass
 class TD3NetworkParams:
@@ -134,9 +172,9 @@ def make_inference_fn(
             output = policy_network.apply(params, observations)
 
             if use_lqr:
-                traj = output.reshape(-1, num_waypoints, 2)
-                # Fixed speed avoids ego_speed == ref_speed bug
-                ego_speed = jnp.ones(traj.shape[0]) * 5.0
+                traj = decode_trajectory(output, num_waypoints)
+                vel_xy_norm = observations[:, _SDC_VEL_XY_IDX]
+                ego_speed = jnp.sqrt(jnp.sum(jnp.square(vel_xy_norm), axis=-1)) * _MAX_OBS_SPEED
                 action = jax_lqr(traj, ego_speed)
             else:
                 action = output
@@ -333,10 +371,9 @@ def _make_loss_fn(
         """Apply actor network and optionally convert via LQR."""
         output = policy_network.apply(params, obs)
         if use_lqr:
-            traj = output.reshape(-1, num_waypoints, 2)
-            # Fixed default speed avoids ego_speed == ref_speed bug
-            # (both would otherwise be computed as ||wp0|| / DT).
-            ego_speed = jnp.ones(traj.shape[0]) * 5.0
+            traj = decode_trajectory(output, num_waypoints)
+            vel_xy_norm = obs[:, _SDC_VEL_XY_IDX]
+            ego_speed = jnp.sqrt(jnp.sum(jnp.square(vel_xy_norm), axis=-1)) * _MAX_OBS_SPEED
             return jax_lqr(traj, ego_speed)
         return output
 

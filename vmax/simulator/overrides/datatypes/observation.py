@@ -164,7 +164,7 @@ def sdc_observation_from_state(
         # (num_obj, num_paths, num_points_per_path_filter)
         sdc_paths_expanded = _tree_expand_and_repeat(sdc_paths, num_obj, len(state.shape))
         # (num_paths, num_obj, num_points_per_path_filter)
-        sdc_paths_expanded = jax.tree_map(lambda x: x.swapaxes(0, 1), sdc_paths_expanded)
+        sdc_paths_expanded = jax.tree_util.tree_map(lambda x: x.swapaxes(0, 1), sdc_paths_expanded)
         # (num_paths, num_obj, num_points_per_path_filter)
         sdc_paths_filtered = jax.vmap(filter_sdc_paths, in_axes=(0, None, None))(
             sdc_paths_expanded,
@@ -172,7 +172,7 @@ def sdc_observation_from_state(
             num_points_per_path_filter,
         )
         # (num_obj, num_paths, num_points_per_path_filter)
-        sdc_paths_filtered = jax.tree_map(lambda x: x.swapaxes(0, 1), sdc_paths_filtered)
+        sdc_paths_filtered = jax.tree_util.tree_map(lambda x: x.swapaxes(0, 1), sdc_paths_filtered)
         global_obs_filter = global_obs_filter.replace(sdc_paths=sdc_paths_filtered)
         global_obs_filter.validate()
 

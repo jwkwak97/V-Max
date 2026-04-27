@@ -22,8 +22,8 @@ class ProgressRatioMetric(abstract_metric.AbstractMetric):
 
         """
         sdc_index = operations.get_index(simulator_state.object_metadata.is_sdc)
-        sdc_traj = jax.tree_map(lambda x: x[sdc_index], simulator_state.sim_trajectory)
-        expert_traj = jax.tree_map(lambda x: x[sdc_index], simulator_state.log_trajectory)
+        sdc_traj = jax.tree_util.tree_map(lambda x: x[sdc_index], simulator_state.sim_trajectory)
+        expert_traj = jax.tree_util.tree_map(lambda x: x[sdc_index], simulator_state.log_trajectory)
 
         value = progress_ratio(sdc_traj, expert_traj)
         valid = jnp.ones_like(value, dtype=jnp.bool_)
@@ -45,8 +45,8 @@ def progress_ratio(sdc_traj: datatypes.Trajectory, expert_traj: datatypes.Trajec
 
     """
     # Ignore the first 10 timesteps
-    sdc_traj = jax.tree_map(lambda x: x[10:], sdc_traj)
-    expert_traj = jax.tree_map(lambda x: x[10:], expert_traj)
+    sdc_traj = jax.tree_util.tree_map(lambda x: x[10:], sdc_traj)
+    expert_traj = jax.tree_util.tree_map(lambda x: x[10:], expert_traj)
 
     # Distances traveled by the expert:
     expert_displacement = jnp.diff(expert_traj.stack_fields(["x", "y"]), axis=0)

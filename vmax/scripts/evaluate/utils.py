@@ -237,7 +237,7 @@ def load_model(env, algorithm, config, model_path):
             imitation_learning_rate=config["algorithm"]["imitation_learning_rate"],
             network_config=config,
         )
-    elif algorithm.lower() in ["sac", "bc", "ppo", "td3"]:
+    elif algorithm.lower() in ["sac", "bc", "ppo"]:
         network = build_network(
             observation_size=obs_size,
             action_size=action_size,
@@ -245,9 +245,25 @@ def load_model(env, algorithm, config, model_path):
             learning_rate=config["algorithm"]["learning_rate"],
             network_config=config,
         )
+    elif algorithm.lower() == "td3":
+        trajectory_size = config.get("algorithm", {}).get("trajectory_size", 0) \
+                          or config.get("trajectory_size", 0)
+        network = build_network(
+            observation_size=obs_size,
+            action_size=action_size,
+            unflatten_fn=unflatten_fn,
+            learning_rate=config["algorithm"]["learning_rate"],
+            network_config=config,
+            trajectory_size=trajectory_size,
+        )
 
     # Create policy function.
-    make_policy = make_inference_fn(network)
+    if algorithm.lower() == "td3":
+        trajectory_size = config.get("algorithm", {}).get("trajectory_size", 0) \
+                          or config.get("trajectory_size", 0)
+        make_policy = make_inference_fn(network, trajectory_size=trajectory_size)
+    else:
+        make_policy = make_inference_fn(network)
     params = load_params(model_path)
 
     return make_policy(params.policy, deterministic=True)

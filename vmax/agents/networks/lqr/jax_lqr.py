@@ -70,8 +70,15 @@ def compute_trajectory_references(trajectory: jnp.ndarray) -> tuple:
     wp1 = trajectory[:, 1, :]
     wp2 = trajectory[:, 2, :]
 
-    dist0 = jnp.linalg.norm(wp0, axis=-1)
-    ref_speed = jnp.clip(dist0 / DT, 0.0, 20.0)
+    # Compute reference speed from total path length / total time (like RITP).
+    # This is more stable than wp0/DT and captures the full trajectory intent.
+    # Use sqrt(sum(sq) + eps) for numerically stable gradient near zero.
+    origin_to_wp0 = jnp.sqrt(jnp.sum(jnp.square(wp0), axis=-1) + 1e-6)  # (B,)
+    diffs = trajectory[:, 1:, :] - trajectory[:, :-1, :]                  # (B, N-1, 2)
+    step_dists = jnp.sqrt(jnp.sum(jnp.square(diffs), axis=-1) + 1e-6)    # (B, N-1)
+    total_dist = origin_to_wp0 + jnp.sum(step_dists, axis=-1)             # (B,)
+    total_time = trajectory.shape[1] * DT
+    ref_speed = jnp.clip(total_dist / total_time, 0.0, 20.0)
 
     heading_err = jnp.arctan2(wp0[:, 1], wp0[:, 0])
     lateral_err = wp0[:, 1]
