@@ -39,11 +39,21 @@ echo "[3-1/6] JAX 버전 고정 (flax가 올릴 수 있으므로 재다운그레
 $PIP install "jax[cuda12]<0.6" --force-reinstall
 
 echo ""
-echo "[4/6] V-Max editable install..."
+echo "[3-2/6] ffmpeg 설치 (mp4 렌더링용)..."
+$PIP install "imageio[ffmpeg]"
+
+echo ""
+echo "[3-3/6] setuptools 버전 고정 (pkg_resources 누락 방지)..."
+# setuptools 70+ 에서 pkg_resources 디렉토리가 생성되지 않는 경우가 있어
+# tensorboard 등 pkg_resources에 의존하는 패키지가 실패함
+$PIP install "setuptools==69.5.1"
+
+echo ""
+echo "[5/6] V-Max editable install..."
 $PIP install -e /home/jovyan/workspace/V-Max --no-deps
 
 echo ""
-echo "[5/6] distrax 패치 적용..."
+echo "[6/6] distrax 패치 적용..."
 $PYTHON - << 'PYEOF'
 import re
 
@@ -69,7 +79,7 @@ else:
 PYEOF
 
 echo ""
-echo "[6/6] flax tracer 패치 적용..."
+echo "[7/6] flax tracer 패치 적용..."
 $PYTHON - << 'PYEOF'
 path = "/home/jovyan/.conda/envs/vmax/lib/python3.10/site-packages/flax/core/tracers.py"
 with open(path, "r") as f:
